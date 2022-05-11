@@ -12,6 +12,14 @@ arma::vec arma_sort(arma::vec x, arma::vec y){
   return x(arma::sort_index(y));
 }
 
+arma::vec arma_sort_lags(const arma::vec& B_help_1, const int& p, const int& K){
+  arma::mat B_help_2 = zeros(K*p, K);
+  
+  for(int l = 0; l < p; ++l){
+    B_help_2.rows(K*l, K*(l + 1) - 1) = reshape(B_help_1.subvec(pow(K,2)*l, pow(K,2) * (l + 1) - 1), K, K);
+  }
+  return(vectorise(B_help_2));
+}
 
 arma::vec softgroup(const arma::vec& u, const double& lambda){
   // Input
@@ -110,7 +118,7 @@ Rcpp::List algorithm1_Cpp_sparse(const arma::mat& y_Xkron, const arma::sp_mat& X
                                  const arma::uvec& rows_L1, const arma::uvec& rows_HIER,
                                  const arma::uvec& indices_B_L1, const arma::uvec& indices_B_HIER, 
                                  const arma::vec& column_L1, const arma::vec& column_HIER,
-                                 const int& K, const double& s,
+                                 const int& K, const int& p, const double& s,
                                  const double& lambda, const double& epsilon, const int& max_iter){
   
   // y_Xkron:  1 x K^2 vector (calculated from t(y)%*%Xkron)
@@ -122,6 +130,7 @@ Rcpp::List algorithm1_Cpp_sparse(const arma::mat& y_Xkron, const arma::sp_mat& X
   // indices_B_L1, indices_B_HIER: Indices of the specific values in rows that have either L1 or HIER penalty
   // column_L1, column_HIER: Columns that parameter belongs to (split into either L1 or HIER penalty)
   // K: number of explanatory variables
+  // p: number of lags
   // s: step size for gradient
   // lambda: tuning parameter
   // epsilon: convergence criterion
@@ -275,7 +284,8 @@ Rcpp::List algorithm1_Cpp_sparse(const arma::mat& y_Xkron, const arma::sp_mat& X
   
   // Reorganize B_new = B_matrix_2[index] so that in the end function returns the right VAR matrix structure
   arma::vec columns = columns_matrix.elem(index);
-  arma::vec B_final = arma_sort(b_new, columns);
+  arma::vec B_help = arma_sort(b_new, columns);
+  arma::vec B_final = arma_sort_lags(B_help, p, K); 
   
   Rcpp::List results = Rcpp::List::create(
                        Rcpp::Named("B") = B_final,
@@ -292,10 +302,10 @@ Rcpp::List PLS_Cpp(const arma::mat& y_Xkron, const arma::sp_mat& XtranspX_kron,
                     const arma::uvec& rows_L1, const arma::uvec& rows_HIER,
                     const arma::uvec& indices_B_L1, const arma::uvec& indices_B_HIER, 
                     const arma::vec& column_L1, const arma::vec& column_HIER,
-                    const int& K, const double& s,
+                    const int& K, const int&p, const double& s,
                     const arma::vec& lambda_beta, const double& epsilon, const int& max_iter){
   
-  arma::mat betas_PLS = zeros(pow(K,2), lambda_beta.size());
+  arma::mat betas_PLS = zeros(pow(K,2)*p, lambda_beta.size());
   arma::vec iter_PLS = zeros(lambda_beta.size());
   
   for(int i = 0; i < lambda_beta.size(); ++i){
@@ -306,7 +316,7 @@ Rcpp::List PLS_Cpp(const arma::mat& y_Xkron, const arma::sp_mat& XtranspX_kron,
                                                               rows_L1, rows_HIER,
                                                               indices_B_L1, indices_B_HIER,
                                                               column_L1, column_HIER,
-                                                              K, s, lambda_beta(i), epsilon, max_iter);
+                                                              K, p, s, lambda_beta(i), epsilon, max_iter);
     
     arma::vec B_vec = list_algorithm1Cpp_PLS["B"];
     int iter = list_algorithm1Cpp_PLS["iter"];
